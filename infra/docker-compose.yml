@@ -1,0 +1,176 @@
+version: '3.8'
+
+networks:
+  coinwatch:
+    name: coinwatch
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coinwatch-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres 
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: coinwatch-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: coinwatch-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"   
+      - "15672:15672" 
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: coinwatch-minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000" 
+      - "9001:9001" 
+    command: server /data --console-address ":9001"
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  traefik:
+    image: traefik:v2.11
+    container_name: coinwatch-traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "85:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+  auth-service:
+    build:
+      context: ../services/auth
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_ENV_PREFIX=AUTH_
+      - AUTH_PROJECT_NAME=auth
+    networks:
+      - coinwatch
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
+      - "traefik.http.routers.auth.entrypoints=web"
+      - "traefik.http.routers.auth.middlewares=auth-strip"
+      - "traefik.http.middlewares.auth-strip.stripprefix.prefixes=/auth"
+      - "traefik.http.services.auth.loadbalancer.server.port=8000"
+
+  billing-service:
+    build:
+      context: ../services/billing
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_ENV_PREFIX=BILLING_
+      - BILLING_PROJECT_NAME=billing
+    networks:
+      - coinwatch
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.billing.rule=PathPrefix(`/billing`)"
+      - "traefik.http.routers.billing.entrypoints=web"
+      - "traefik.http.routers.billing.middlewares=billing-strip"
+      - "traefik.http.middlewares.billing-strip.stripprefix.prefixes=/billing"
+      - "traefik.http.services.billing.loadbalancer.server.port=8000"
+
+  watcher-service:
+    build:
+      context: ../services/watcher
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_ENV_PREFIX=WATCHER_
+      - WATCHER_PROJECT_NAME=watcher
+    networks:
+      - coinwatch
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.watcher.rule=PathPrefix(`/watcher`)"
+      - "traefik.http.routers.watcher.entrypoints=web"
+      - "traefik.http.routers.watcher.middlewares=watcher-strip"
+      - "traefik.http.middlewares.watcher-strip.stripprefix.prefixes=/watcher"
+      - "traefik.http.services.watcher.loadbalancer.server.port=8000"
+
+  notifications-service:
+    build:
+      context: ../services/notifications
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_ENV_PREFIX=NOTIFICATIONS_
+      - NOTIFICATIONS_PROJECT_NAME=notifications
+    networks:
+      - coinwatch
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.notifications.rule=PathPrefix(`/notifications`)"
+      - "traefik.http.routers.notifications.entrypoints=web"
+      - "traefik.http.routers.notifications.middlewares=notifications-strip"
+      - "traefik.http.middlewares.notifications-strip.stripprefix.prefixes=/notifications"
+      - "traefik.http.services.notifications.loadbalancer.server.port=8000"
