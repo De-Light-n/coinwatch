@@ -152,6 +152,8 @@ services:
       - WATCHER_PROJECT_NAME=watcher
     networks:
       - coinwatch
+    volumes:
+      - ../services/watcher:/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
