@@ -141,15 +141,22 @@ services:
       - "traefik.http.middlewares.billing-strip.stripprefix.prefixes=/billing"
       - "traefik.http.services.billing.loadbalancer.server.port=8000"
 
-  watcher-service:
+  watcher-api:
     build:
       context: ../services/watcher
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       - SERVICE_ENV_PREFIX=WATCHER_
       - WATCHER_PROJECT_NAME=watcher
     networks:
       - coinwatch
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.watcher.rule=PathPrefix(`/watcher`)"
@@ -158,6 +165,55 @@ services:
       - "traefik.http.middlewares.watcher-strip.stripprefix.prefixes=/watcher"
       - "traefik.http.services.watcher.loadbalancer.server.port=8000"
 
+  watcher-worker:
+    build:
+      context: ../services/watcher
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "app.celery", "worker", "--loglevel=info"]
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_ENV_PREFIX=WATCHER_
+      - WATCHER_PROJECT_NAME=watcher
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.celery", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  watcher-beat:
+    build:
+      context: ../services/watcher
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "app.celery", "beat", "--loglevel=info"]
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_ENV_PREFIX=WATCHER_
+      - WATCHER_PROJECT_NAME=watcher
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  watcher-flower:
+    build:
+      context: ../services/watcher
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "app.celery", "flower", "--port=5555"]
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_ENV_PREFIX=WATCHER_
+    ports:
+      - "5555:5555"
+    networks:
+      - coinwatch
   notifications-service:
     build:
       context: ../services/notifications

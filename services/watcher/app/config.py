@@ -1,17 +1,22 @@
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENV_PREFIX = os.getenv("SERVICE_ENV_PREFIX", "AUTH_")
+ENV_PREFIX = os.getenv("SERVICE_ENV_PREFIX", "WATCHER_")
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "auth" 
+    PROJECT_NAME: str = "watcher"
     ENV: str = "development"
     DEBUG: bool = True
-    DB_URL: str = "postgresql+asyncpg://postgres:super_secret_password_123@localhost:5432/auth_db"
+    DB_URL: str 
+    REDIS_URL: str 
+    RABBITMQ_URL: str 
+    COINGECKO_BASE_URL: str
+    AUTH_SERVICE_URL: str 
+    SERVICE_TOKEN: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_prefix=ENV_PREFIX,
+        env_prefix="WATCHER_",
         extra="ignore"
     )
 
