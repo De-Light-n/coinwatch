@@ -107,15 +107,19 @@ services:
       interval: 5s
       timeout: 3s
       retries: 3
+
   auth-service:
     build:
       context: ../services/auth
       dockerfile: Dockerfile
-    environment:
-      - SERVICE_ENV_PREFIX=AUTH_
-      - AUTH_PROJECT_NAME=auth
+    env_file:
+      - .env  
+    volumes:
+      - ../.env:/app/.env  
     networks:
       - coinwatch
+    ports:
+      - "8000:8000"  
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
