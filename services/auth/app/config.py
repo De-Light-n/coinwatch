@@ -7,12 +7,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "auth" 
     ENV: str = "development"
     DEBUG: bool = True
-    DB_URL: str = "postgresql+asyncpg://postgres:super_secret_password_123@localhost:5432/auth_db"
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix=ENV_PREFIX,
-        extra="ignore"
-    )
+    SECRET_KEY: str
+    REDIS_URL: str
+    INTERNAL_SERVICE_TOKEN: str
+    DATABASE_URL: str
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
