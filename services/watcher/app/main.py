@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api.warcher import router  # <-- додай імпорт
+from app.api.warcher import router  
 
 structlog.configure(
     processors=[
@@ -28,7 +28,9 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
     docs_url="/docs",
+    openapi_url="/openapi.json",
     lifespan=lifespan,
+    root_path="/watcher", 
 )
 
 app.add_middleware(

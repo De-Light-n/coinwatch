@@ -1,74 +1,67 @@
-import uuid
-from fastapi import APIRouter, Depends, Query
-
-from app.deps import get_watcher_service, get_current_user_id
+from typing import List, Optional
+from uuid import UUID
+from fastapi import APIRouter, Depends, status, Query
+from app.deps import get_watch_service, get_current_user
 from app.schemas.watcher import WatcherCreate, WatcherUpdate, WatchResponseSchema
-from app.services.watcher import WatcherService
+from app.services.watch_service import WatchService
 
-router = APIRouter(prefix="/watcher", tags=["Watcher"])
+router = APIRouter(prefix="/watches", tags=["Watches"])
 
-
-@router.post("/watches", response_model=WatchResponseSchema)
+@router.post("/", response_model=WatchResponseSchema, status_code=status.HTTP_201_CREATED)
 async def create_watch(
-    payload: WatcherCreate,
-    user_id: uuid.UUID = Depends(get_current_user_id),
-    service: WatcherService = Depends(get_watcher_service),
+    data: WatcherCreate,
+    watch_service: WatchService = Depends(get_watch_service),
+    current_user = Depends(get_current_user)
 ):
-    return await service.create_watch(user_id, payload)
+    return await watch_service.create_watch(data=data, user_id=str(current_user.id))
 
-
-@router.get("/watches", response_model=list[WatchResponseSchema])
-async def list_watches(
-    user_id: uuid.UUID = Depends(get_current_user_id),
-    asset: str | None = None,
-    is_active: bool | None = None,
-    limit: int = Query(50, le=100),
-    offset: int = 0,
-    service: WatcherService = Depends(get_watcher_service),
+@router.get("/", response_model=List[WatchResponseSchema])
+async def get_watches(
+    is_active: Optional[bool] = Query(None),
+    asset: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    watch_service: WatchService = Depends(get_watch_service),
+    current_user = Depends(get_current_user)
 ):
-    return await service.list_watches(user_id, asset, is_active, limit, offset)
+    return await watch_service.get_user_watches(
+        user_id=str(current_user.id),
+        is_active=is_active,
+        asset=asset,
+        limit=limit,
+        offset=offset
+    )
 
-
-@router.get("/watches/{watch_id}", response_model=WatchResponseSchema)
-async def get_watch(
-    watch_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
-    service: WatcherService = Depends(get_watcher_service),
+@router.get("/{id}", response_model=WatchResponseSchema)
+async def get_watch_details(
+    id: UUID,
+    watch_service: WatchService = Depends(get_watch_service),
+    current_user = Depends(get_current_user)
 ):
-    return await service.get_watch(user_id, watch_id)
+    return await watch_service.get_watch_or_404(watch_id=id, user_id=str(current_user.id))
 
-
-@router.patch("/watches/{watch_id}", response_model=WatchResponseSchema)
+@router.patch("/{id}", response_model=WatchResponseSchema)
 async def update_watch(
-    watch_id: uuid.UUID,
-    payload: WatcherUpdate,
-    user_id: uuid.UUID = Depends(get_current_user_id),
-    service: WatcherService = Depends(get_watcher_service),
+    id: UUID,
+    data: WatcherUpdate,
+    watch_service: WatchService = Depends(get_watch_service),
+    current_user = Depends(get_current_user)
 ):
-    return await service.update_watch(user_id, watch_id, payload)
+    return await watch_service.update_watch(watch_id=id, user_id=str(current_user.id), data=data)
 
-
-@router.delete("/watches/{watch_id}")
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_watch(
-    watch_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
-    service: WatcherService = Depends(get_watcher_service),
+    id: UUID,
+    watch_service: WatchService = Depends(get_watch_service),
+    current_user = Depends(get_current_user)
 ):
-    return await service.delete_watch(user_id, watch_id)
-
-
-@router.get("/watches/{watch_id}/alerts")
-async def watch_alerts(
-    watch_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
-    service: WatcherService = Depends(get_watcher_service),
-):
-    return await service.get_alerts(user_id, watch_id)
-
+    await watch_service.delete_watch(watch_id=id, user_id=str(current_user.id))
+    return None
 
 @router.get("/coins/search")
 async def search_coins(
-    q: str,
-    service: WatcherService = Depends(get_watcher_service),
+    q: str = Query(..., min_length=1),
+    watch_service: WatchService = Depends(get_watch_service),
+    current_user = Depends(get_current_user)
 ):
-    return await service.search_coins(q)
+    return await watch_service.search_coins(query=q)

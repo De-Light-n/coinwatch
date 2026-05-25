@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel
-from app.models.watch import ConditionType
-
+from typing import Optional
+from app.models.watch import ConditionType 
 
 class WatcherCreate(BaseModel):
     name: str
@@ -11,6 +11,11 @@ class WatcherCreate(BaseModel):
     condition_type: ConditionType
     threshold: Decimal
 
+class WatcherUpdate(BaseModel):
+    name: Optional[str] = None
+    condition_type: Optional[ConditionType] = None
+    threshold: Optional[Decimal] = None
+    is_active: Optional[bool] = None
 
 class WatchResponseSchema(BaseModel):
     id: uuid.UUID
@@ -21,8 +26,8 @@ class WatchResponseSchema(BaseModel):
     threshold: Decimal
     interval_seconds: int
     is_active: bool
-    last_checked_at: datetime | None
-    last_triggered_at: datetime | None
+    last_checked_at: datetime | None = None
+    last_triggered_at: datetime | None = None
     cooldown_seconds: int
     created_at: datetime
     updated_at: datetime

@@ -112,11 +112,13 @@ services:
     build:
       context: ../services/auth
       dockerfile: Dockerfile
-    environment:
-      - SERVICE_ENV_PREFIX=AUTH_
-      - AUTH_PROJECT_NAME=auth
+    env_file:
+      - ../.env  
+    volumes:
+      - ../.env:/app/.env  
     networks:
       - coinwatch
+    
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
@@ -148,6 +150,7 @@ services:
       dockerfile: Dockerfile
     env_file:
       - ../.env
+    
     environment:
       - SERVICE_ENV_PREFIX=WATCHER_
       - WATCHER_PROJECT_NAME=watcher

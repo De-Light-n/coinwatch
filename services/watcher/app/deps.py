@@ -1,54 +1,38 @@
-from typing import AsyncGenerator
-
-from fastapi import Depends
-from redis.asyncio import Redis
+from typing import AsyncGenerator, Optional
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 
 from app.clients.auth import AuthClient
 from app.clients.coingecko import CoinGeckoClient
-from app.crud.watcher import WatchCrud
 from app.db import async_session_factory, get_redis
-from app.services.watcher import WatcherService
+from app.services.watch_service import WatchService
+from app.repository.watch_repository import WatchRepository
 
+security = HTTPBearer(auto_error=False)
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    auth_client: AuthClient = Depends()
+):
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization token"
+        )
+    
+    return await auth_client.get_current_user(credentials.credentials)
 
-async def get_redis_client() -> AsyncGenerator[Redis, None]:
-    redis = await get_redis()
-    try:
-        yield redis
-    finally:
-        await redis.close()
-
-
-async def get_auth_client() -> AsyncGenerator[AuthClient, None]:
-    client = AuthClient()
-    try:
-        yield client
-    finally:
-        await client.aclose()
-
-
-async def get_coingecko_client(
-    redis: Redis = Depends(get_redis_client),
-) -> AsyncGenerator[CoinGeckoClient, None]:
-    client = CoinGeckoClient(redis=redis)
-    try:
-        yield client
-    finally:
-        await client.aclose()
-
-
-async def get_watcher_service(
+async def get_watch_service(
     session: AsyncSession = Depends(get_session),
-    auth: AuthClient = Depends(get_auth_client),
-    coingecko: CoinGeckoClient = Depends(get_coingecko_client),
-) -> WatcherService:
-    crud = WatchCrud(session=session)
-    return WatcherService(auth=auth, coingecko=coingecko, crud=crud)
+    redis: Redis = Depends(get_redis),
+    auth_client: AuthClient = Depends()
+) -> WatchService:
+    repo = WatchRepository(session)
+    coingecko_client = CoinGeckoClient(redis=redis)
+    return WatchService(repo=repo, auth_client=auth_client, coingecko_client=coingecko_client)
