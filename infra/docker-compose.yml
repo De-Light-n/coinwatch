@@ -95,6 +95,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--accesslog=true" 
     ports:
       - "85:80"
       - "8080:8080"
@@ -113,13 +114,12 @@ services:
       context: ../services/auth
       dockerfile: Dockerfile
     env_file:
-      - .env  
+      - ../.env  
     volumes:
       - ../.env:/app/.env  
     networks:
       - coinwatch
-    ports:
-      - "8000:8000"  
+    
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
@@ -151,6 +151,7 @@ services:
       dockerfile: Dockerfile
     env_file:
       - ../.env
+    
     environment:
       - SERVICE_ENV_PREFIX=WATCHER_
       - WATCHER_PROJECT_NAME=watcher

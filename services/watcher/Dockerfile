@@ -1,8 +1,7 @@
 FROM python:3.12-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
-RUN uv pip install --system fastapi uvicorn pydantic pydantic-settings sqlalchemy asyncpg alembic httpx structlog pytest pytest-asyncio celery redis flower
-
+RUN uv pip install --system fastapi uvicorn pydantic pydantic-settings sqlalchemy asyncpg alembic httpx structlog pytest pytest-asyncio celery redis flower PyJWT
 FROM python:3.12-slim AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str 
     COINGECKO_BASE_URL: str
     AUTH_SERVICE_URL: str 
-    SERVICE_TOKEN: str
+    INTERNAL_SERVICE_TOKEN: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
