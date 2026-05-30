@@ -4,8 +4,9 @@ from alembic import context
 import os
 
 # Імпортуємо Base та всі моделі
-from services.billing.models.base import Base
-from services.billing.models import Customer, Subscription, Invoice, WebhookEvent
+from services.billing.app.models import Customer, Invoice, Subscription
+from services.billing.app.models.base import Base
+from services.billing.app.models import WebhookEvent
 
 # Alembic Config object
 config = context.config

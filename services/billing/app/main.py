@@ -1,23 +1,11 @@
-
-import structlog
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.config import settings
+from app.logging import setup_logging
+from app.routers import billing, webhook
+from fastapi.middleware.cors import CORSMiddleware
 
-structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
-    ],
-    logger_factory=structlog.PrintLoggerFactory(),
-    wrapper_class=structlog.make_filtering_bound_logger(20 if not settings.DEBUG else 10),
-    cache_logger_on_first_use=True,
-)
-
-logger = structlog.get_logger()
+logger = setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,20 +16,22 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
     docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",  # ← додай це
     lifespan=lifespan
 )
 
 app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.get("/health", tags=["Infrastructure"])
+app.include_router(billing.router, prefix="/billing", tags=["billing"])
+app.include_router(webhook.router, prefix="/webhooks", tags=["webhooks"])
+
+@app.get("/health", tags=["infrastructure"])
 async def health_check():
-    return {
-        "status": "ok",
-        "service": settings.PROJECT_NAME
-    }
+    return {"status": "ok", "service": settings.PROJECT_NAME}
