@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     DB_URL: str 
     REDIS_URL: str 
+    REDIS_URL_BACKEND: str 
     RABBITMQ_URL: str 
     COINGECKO_BASE_URL: str
     AUTH_SERVICE_URL: str 
