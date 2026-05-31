@@ -15,6 +15,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: coinwatch-postgres
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -51,6 +53,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: coinwatch-rabbitmq
+    env_file:
+      - .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -162,15 +166,27 @@ services:
       - "traefik.http.middlewares.watcher-strip.stripprefix.prefixes=/watcher"
       - "traefik.http.services.watcher.loadbalancer.server.port=8000"
 
-  notifications-service:
+  notifications-api:
     build:
       context: ../services/notifications
       dockerfile: Dockerfile
+    env_file:
+      - .env
     environment:
-      - SERVICE_ENV_PREFIX=NOTIFICATIONS_
-      - NOTIFICATIONS_PROJECT_NAME=notifications
+      - SERVICE_ENV_PREFIX=NOTIF_
+      - NOTIF_PROJECT_NAME=notifications
     networks:
       - coinwatch
+    ports:
+      - "8004:8000"
+    depends_on:
+      - postgres
+      - rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.notifications.rule=PathPrefix(`/notifications`)"
@@ -178,3 +194,44 @@ services:
       - "traefik.http.routers.notifications.middlewares=notifications-strip"
       - "traefik.http.middlewares.notifications-strip.stripprefix.prefixes=/notifications"
       - "traefik.http.services.notifications.loadbalancer.server.port=8000"
+
+  notifications-consumer:
+    build:
+      context: ../services/notifications
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - SERVICE_ENV_PREFIX=NOTIF_
+      - NOTIF_PROJECT_NAME=notifications
+    command: ["python", "-m", "app.consumer"]
+    depends_on:
+      - rabbitmq
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(1); s.connect(('rabbitmq',5672)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  notifications-worker:
+    build:
+      context: ../services/notifications
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - SERVICE_ENV_PREFIX=NOTIF_
+      - NOTIF_PROJECT_NAME=notifications
+    command: ["python", "-m", "app.celery_worker"]
+    depends_on:
+      - rabbitmq
+      - redis
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(1); s.connect(('rabbitmq',5672)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
