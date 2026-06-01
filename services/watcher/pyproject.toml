@@ -1,28 +1,35 @@
-[tool.poetry]
-name = "coinwatch-service-template"
+[project]
+name = "watcher_service"
 version = "0.1.0"
 description = "Template for Coinwatch microservices"
-readme = "README.md"
+requires-python = ">=3.12"
 
-[tool.poetry.dependencies]
-python = "^3.12"
-fastapi = "^0.111.0"
-uvicorn = {extras = ["standard"], version = "^0.30.1"}
-pydantic = "^2.7.4"
-pydantic-settings = "^2.3.3"
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.31"}
-asyncpg = "^0.29.0"
-alembic = "^1.13.1"
-httpx = "^0.27.0"
-structlog = "^24.2.0"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.1",
+    "pydantic>=2.7.4",
+    "pydantic-settings>=2.3.3",
+    "sqlalchemy[asyncio]>=2.0.31",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.1",
+    "httpx>=0.27.0",
+    "structlog>=24.2.0",
+    "redis[asyncio]>=7.4.0",
+    "pyjwt>=2.13.0",
+    "pybreaker>=1.4.1",
+    "respx>=0.23.1",
+    "kombu>=5.6.2",
+    "psycopg2-binary>=2.9.12",
+    "celery>=5.3.6",
+    "tenacity>=9.1.4",
+    "flower>=2.0.1",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.2.2"
-pytest-asyncio = "^0.23.7"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.setuptools]
+packages = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

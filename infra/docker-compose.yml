@@ -1,24 +1,26 @@
 version: '3.8'
-
+ 
 networks:
   coinwatch:
     name: coinwatch
     driver: bridge
-
+ 
 volumes:
   postgres-data:
   redis-data:
   rabbitmq-data:
   minio-data:
-
+ 
 services:
   postgres:
     image: postgres:16-alpine
     container_name: coinwatch-postgres
+    env_file:
+      - ../.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: postgres 
+      POSTGRES_DB: postgres
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -31,7 +33,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
+ 
   redis:
     image: redis:7-alpine
     container_name: coinwatch-redis
@@ -47,18 +49,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
+ 
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: coinwatch-rabbitmq
+    env_file:
+      - ../.env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     ports:
-      - "5672:5672"   
-      - "15672:15672" 
+      - "5672:5672"
+      - "15672:15672"
     networks:
       - coinwatch
     healthcheck:
@@ -66,18 +70,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+ 
   minio:
     image: minio/minio:latest
     container_name: coinwatch-minio
+    env_file:
+      - ../.env
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio-data:/data
     ports:
-      - "9000:9000" 
-      - "9001:9001" 
+      - "9000:9000"
+      - "9001:9001"
     command: server /data --console-address ":9001"
     networks:
       - coinwatch
@@ -86,7 +92,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
+ 
   traefik:
     image: traefik:v2.11
     container_name: coinwatch-traefik
@@ -95,6 +101,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--accesslog=true"
     ports:
       - "85:80"
       - "8080:8080"
@@ -107,19 +114,22 @@ services:
       interval: 5s
       timeout: 3s
       retries: 3
-
+ 
   auth-service:
     build:
       context: ../services/auth
       dockerfile: Dockerfile
     env_file:
-      - .env  
+      - ../.env
     volumes:
-      - ../.env:/app/.env  
+      - ../.env:/app/.env
     networks:
       - coinwatch
-    ports:
-      - "8000:8000"  
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
@@ -127,7 +137,7 @@ services:
       - "traefik.http.routers.auth.middlewares=auth-strip"
       - "traefik.http.middlewares.auth-strip.stripprefix.prefixes=/auth"
       - "traefik.http.services.auth.loadbalancer.server.port=8000"
-
+ 
   billing-service:
     build:
       context: ../services/billing
@@ -144,24 +154,120 @@ services:
       - "traefik.http.routers.billing.middlewares=billing-strip"
       - "traefik.http.middlewares.billing-strip.stripprefix.prefixes=/billing"
       - "traefik.http.services.billing.loadbalancer.server.port=8000"
-
-  watcher-service:
+ 
+  watcher-api:
     build:
       context: ../services/watcher
       dockerfile: Dockerfile
+    env_file:
+      - ../.env
     environment:
       - SERVICE_ENV_PREFIX=WATCHER_
       - WATCHER_PROJECT_NAME=watcher
+      - PYTHONPATH=/app
     networks:
       - coinwatch
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ../.env:/app/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.watcher.rule=PathPrefix(`/watcher`)"
       - "traefik.http.routers.watcher.entrypoints=web"
-      - "traefik.http.routers.watcher.middlewares=watcher-strip"
-      - "traefik.http.middlewares.watcher-strip.stripprefix.prefixes=/watcher"
+      - "traefik.http.routers.watcher.service=watcher"
       - "traefik.http.services.watcher.loadbalancer.server.port=8000"
-
+      - "traefik.http.middlewares.watcher-strip.stripprefix.prefixes=/watcher"
+      - "traefik.http.routers.watcher.middlewares=watcher-strip"
+ 
+  watcher-worker:
+    build:
+      context: ../services/watcher
+      dockerfile: Dockerfile
+    command: celery -A app.celery.celery worker --loglevel=info -P prefork --concurrency=4
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_ENV_PREFIX=WATCHER_
+      - WATCHER_PROJECT_NAME=watcher
+      - PYTHONPATH=/app
+    networks:
+      - coinwatch
+    volumes:
+      - ../.env:/app/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/celery", "-A", "app.celery.celery", "inspect", "ping", "--timeout=5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+ 
+  watcher-beat:
+    build:
+      context: ../services/watcher
+      dockerfile: Dockerfile
+    command: ["/app/.venv/bin/celery", "-A", "app.celery", "beat", "--loglevel=info"]
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_ENV_PREFIX=WATCHER_
+      - PYTHONPATH=/app
+    networks:
+      - coinwatch
+    volumes:
+      - ../.env:/app/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+ 
+  watcher-flower:
+      image: mher/flower:2.0
+      env_file:
+        - ../.env
+      ports:
+        - "5555:5555"
+      networks:
+        - coinwatch
+      depends_on:
+        redis:
+          condition: service_healthy
+      environment:
+        - CELERY_BROKER_URL=${WATCHER_REDIS_URL}
+      command: >
+        celery
+        --broker=${WATCHER_REDIS_URL}
+        flower
+        --url_prefix=flower
+        --basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}
+      labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.rule=PathPrefix(`/flower`)"
+      - "traefik.http.routers.flower.entrypoints=web"
+      - "traefik.http.services.flower.loadbalancer.server.port=5555"
+      - "traefik.http.middlewares.flower-slash.redirectregex.regex=^http://([^/]+)/flower$$"
+      - "traefik.http.middlewares.flower-slash.redirectregex.replacement=http://$$1/flower/"
+      - "traefik.http.middlewares.flower-slash.redirectregex.permanent=false"
+      - "traefik.http.routers.flower.middlewares=flower-slash"
+ 
   notifications-service:
     build:
       context: ../services/notifications
@@ -178,3 +284,4 @@ services:
       - "traefik.http.routers.notifications.middlewares=notifications-strip"
       - "traefik.http.middlewares.notifications-strip.stripprefix.prefixes=/notifications"
       - "traefik.http.services.notifications.loadbalancer.server.port=8000"
+ 
