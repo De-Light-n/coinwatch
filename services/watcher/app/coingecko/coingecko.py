@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 circuit_breaker = pybreaker.CircuitBreaker(
     fail_max=5,
     reset_timeout=60,
-    exclude=[CoinGeckoInvalidCoinError],
+    exclude=[CoinGeckoInvalidCoinError, CoinGeckoRateLimitError],
 )
 
 
@@ -91,7 +91,7 @@ class CoinGeckoClient:
             raise CoinGeckoUnavailableError("CoinGecko circuit breaker open")
 
     # =====================================================
-    # RETRY (ONLY 5xx + 429)
+    # RETRY (ONLY 5xx)
     # =====================================================
     @retry(
         stop=stop_after_attempt(3),
@@ -116,8 +116,12 @@ class CoinGeckoClient:
         if response.status_code == 404:
             raise CoinGeckoInvalidCoinError("Coin not found")
 
-        # ---------------- RETRYABLE ERRORS ----------------
-        if response.status_code in (429, 500, 502, 503, 504):
+        # ---------------- 429 — rate limit from server ----------------
+        if response.status_code == 429:
+            raise CoinGeckoRateLimitError("CoinGecko API rate limit exceeded")
+
+        # ---------------- RETRYABLE SERVER ERRORS ----------------
+        if response.status_code in (500, 502, 503, 504):
             raise httpx.HTTPStatusError(
                 "Retryable error",
                 request=response.request,
@@ -232,15 +236,19 @@ class CoinGeckoClient:
         )
 
         return coins
-    
 
+    # =====================================================
+    # VALIDATE ASSET
+    # =====================================================
     async def validate_asset(self, asset_id: str) -> bool:
         try:
-            coins = await self.search_coins(asset_id)
-
-            return any(
-                c.get("id", "").lower() == asset_id.lower()
-                for c in coins
+            result = await self._request(
+                "GET",
+                "/simple/price",
+                {"ids": asset_id, "vs_currencies": "usd"},
             )
+            return asset_id.lower() in result
+        except CoinGeckoInvalidCoinError:
+            return False
         except Exception:
             return False
