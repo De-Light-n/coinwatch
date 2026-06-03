@@ -54,7 +54,7 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: coinwatch-rabbitmq
     env_file:
-      - ../.env
+      - .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -197,95 +197,28 @@ services:
       - "traefik.http.routers.watcher.entrypoints=web"
       - "traefik.http.routers.watcher.service=watcher"
       - "traefik.http.services.watcher.loadbalancer.server.port=8000"
-      - "traefik.http.middlewares.watcher-strip.stripprefix.prefixes=/watcher"
-      - "traefik.http.routers.watcher.middlewares=watcher-strip"
- 
-  watcher-worker:
-    build:
-      context: ../services/watcher
-      dockerfile: Dockerfile
-    command: celery -A app.celery.celery worker --loglevel=info -P prefork --concurrency=4
-    env_file:
-      - ../.env
-    environment:
-      - SERVICE_ENV_PREFIX=WATCHER_
-      - WATCHER_PROJECT_NAME=watcher
-      - PYTHONPATH=/app
-    networks:
-      - coinwatch
-    volumes:
-      - ../.env:/app/.env
-    depends_on:
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "/app/.venv/bin/celery", "-A", "app.celery.celery", "inspect", "ping", "--timeout=5"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
- 
-  watcher-beat:
-    build:
-      context: ../services/watcher
-      dockerfile: Dockerfile
-    command: ["/app/.venv/bin/celery", "-A", "app.celery", "beat", "--loglevel=info"]
-    env_file:
-      - ../.env
-    environment:
-      - SERVICE_ENV_PREFIX=WATCHER_
-      - PYTHONPATH=/app
-    networks:
-      - coinwatch
-    volumes:
-      - ../.env:/app/.env
-    depends_on:
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
- 
-  watcher-flower:
-      image: mher/flower:2.0
-      env_file:
-        - ../.env
-      ports:
-        - "5555:5555"
-      networks:
-        - coinwatch
-      depends_on:
-        redis:
-          condition: service_healthy
-      environment:
-        - CELERY_BROKER_URL=${WATCHER_REDIS_URL}
-      command: >
-        celery
-        --broker=${WATCHER_REDIS_URL}
-        flower
-        --url_prefix=flower
-        --basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}
-      labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.flower.rule=PathPrefix(`/flower`)"
-      - "traefik.http.routers.flower.entrypoints=web"
-      - "traefik.http.services.flower.loadbalancer.server.port=5555"
-      - "traefik.http.middlewares.flower-slash.redirectregex.regex=^http://([^/]+)/flower$$"
-      - "traefik.http.middlewares.flower-slash.redirectregex.replacement=http://$$1/flower/"
-      - "traefik.http.middlewares.flower-slash.redirectregex.permanent=false"
-      - "traefik.http.routers.flower.middlewares=flower-slash"
- 
-  notifications-service:
+
+  notifications-api:
     build:
       context: ../services/notifications
       dockerfile: Dockerfile
+    env_file:
+      - .env
     environment:
-      - SERVICE_ENV_PREFIX=NOTIFICATIONS_
-      - NOTIFICATIONS_PROJECT_NAME=notifications
+      - SERVICE_ENV_PREFIX=NOTIF_
+      - NOTIF_PROJECT_NAME=notifications
     networks:
       - coinwatch
+    ports:
+      - "8004:8000"
+    depends_on:
+      - postgres
+      - rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.notifications.rule=PathPrefix(`/notifications`)"
@@ -293,4 +226,44 @@ services:
       - "traefik.http.routers.notifications.middlewares=notifications-strip"
       - "traefik.http.middlewares.notifications-strip.stripprefix.prefixes=/notifications"
       - "traefik.http.services.notifications.loadbalancer.server.port=8000"
- 
+
+  notifications-consumer:
+    build:
+      context: ../services/notifications
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - SERVICE_ENV_PREFIX=NOTIF_
+      - NOTIF_PROJECT_NAME=notifications
+    command: ["python", "-m", "app.consumer"]
+    depends_on:
+      - rabbitmq
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(1); s.connect(('rabbitmq',5672)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  notifications-worker:
+    build:
+      context: ../services/notifications
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - SERVICE_ENV_PREFIX=NOTIF_
+      - NOTIF_PROJECT_NAME=notifications
+    command: ["python", "-m", "app.celery_worker"]
+    depends_on:
+      - rabbitmq
+      - redis
+    networks:
+      - coinwatch
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(1); s.connect(('rabbitmq',5672)); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
