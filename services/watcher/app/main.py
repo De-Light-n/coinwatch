@@ -1,47 +1,84 @@
-
 import structlog
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.api.watcher import router
 from app.config import settings
+from app.coingecko.exceptions import (
+    CoinGeckoRateLimitError,
+    CoinGeckoUnavailableError,
+)
+from app.db import close_db, close_redis
+
 
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
-    ],
-    logger_factory=structlog.PrintLoggerFactory(),
-    wrapper_class=structlog.make_filtering_bound_logger(20 if not settings.DEBUG else 10),
-    cache_logger_on_first_use=True,
+        structlog.processors.JSONRenderer(),
+    ]
 )
 
 logger = structlog.get_logger()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Service initialization", service=settings.PROJECT_NAME, env=settings.ENV)
+    logger.info("service_starting", service=settings.PROJECT_NAME)
+
     yield
+
+    logger.info("service_shutting_down", service=settings.PROJECT_NAME)
+
+    await close_db()
+    await close_redis()
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
     docs_url="/docs",
-    lifespan=lifespan
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+    root_path="/watcher",
 )
+
+
+@app.exception_handler(CoinGeckoRateLimitError)
+async def rate_limit_handler(request: Request, exc: CoinGeckoRateLimitError):
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": "CoinGecko rate limit exceeded"},
+    )
+
+
+@app.exception_handler(CoinGeckoUnavailableError)
+async def unavailable_handler(request: Request, exc: CoinGeckoUnavailableError):
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "CoinGecko service temporarily unavailable"},
+    )
+
 
 app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.get("/health", tags=["Infrastructure"])
-async def health_check():
+
+app.include_router(router)
+
+
+@app.get("/health")
+async def health():
     return {
         "status": "ok",
-        "service": settings.PROJECT_NAME
+        "service": settings.PROJECT_NAME,
     }

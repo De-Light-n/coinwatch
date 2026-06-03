@@ -1,0 +1,220 @@
+{
+  "info": {
+    "name": "Coinwatch Billing Service",
+    "description": "Collection of API requests for testing the billing service endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "POST Checkout - Create Stripe Session",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"plan\": \"pro\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/billing/checkout",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "billing",
+            "checkout"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST Checkout - Business Plan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"plan\": \"business\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/billing/checkout",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "billing",
+            "checkout"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST Portal - Customer Portal Session",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{base_url}}/billing/portal",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "billing",
+            "portal"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET Subscriptions - Get Current Subscription",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/billing/subscriptions/me",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "billing",
+            "subscriptions",
+            "me"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST Cancel - Cancel Subscription",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{base_url}}/billing/cancel",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "billing",
+            "cancel"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET Invoices - Get Invoice History",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/billing/invoices?limit=10&offset=0",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "billing",
+            "invoices"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8001",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "YOUR_JWT_TOKEN_HERE",
+      "type": "string",
+      "description": "JWT token generated from auth service. Format: {\"sub\": \"<uuid>\", \"email\": \"user@example.com\"}"
+    }
+  ]
+}
