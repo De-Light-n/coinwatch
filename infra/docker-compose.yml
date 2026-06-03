@@ -29,7 +29,7 @@ services:
     networks:
       - coinwatch
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U $$DB_USER -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -144,7 +144,16 @@ services:
       dockerfile: Dockerfile
     environment:
       - SERVICE_ENV_PREFIX=BILLING_
-      - BILLING_PROJECT_NAME=billing
+      - BILLING_DB_URL=${BILLING_DB_URL}
+      - BILLING_STRIPE_SECRET_KEY=${BILLING_STRIPE_SECRET_KEY}
+      - BILLING_STRIPE_WEBHOOK_SECRET=${BILLING_STRIPE_WEBHOOK_SECRET}
+      - BILLING_STRIPE_PRO_PRICE_ID=${BILLING_STRIPE_PRO_PRICE_ID}
+      - BILLING_STRIPE_BUSINESS_PRICE_ID=${BILLING_STRIPE_BUSINESS_PRICE_ID}
+      - BILLING_RABBITMQ_URL=${BILLING_RABBITMQ_URL}
+      - BILLING_AUTH_SERVICE_URL=${BILLING_AUTH_SERVICE_URL}
+      - BILLING_SERVICE_TOKEN=${BILLING_SERVICE_TOKEN}
+    env_file:
+      - ../.env   
     networks:
       - coinwatch
     labels:
